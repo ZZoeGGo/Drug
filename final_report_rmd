@@ -1,0 +1,113 @@
+# Drug
+
+## Introduction
+This report summarizes the model and analysis associated with the Treatment Episode Data Set – Discharges (TEDS-D) from substance abuse treatment facilities. The purpose of the report is discussing the drug treatment applied to young persons and carry out a model to find the effects to the treatment completion. One of the founding is the completion of drug treatment is more difficult to the individuals addicted to 'hard' drugs (Heroin, Opiates, Methamphetamine, Cocaine) than the ones addicted to alcohol or marijuana, and the other concludes that state Florida carried out more effective treatment programes than the other states, while the low completion rates in state Virginia are highly problematic. 
+
+## Methods
+We use dataset "drug.rds" from Treatment Episode Data Set with NA rows exclusion (since glm model automatically removes NA rows while inla treats NAs` as 0, we remove all NA rows for accuracy) and renamed forInla. The dataset forInla has 293772 observations and 9 variables:completed(level True or False), SUB1(type of drug), Gender(level male or female), Age, STFIPS(name of State), raceEthnicity, homeless(level True or False), Educ(Education), Town and y(level 0 when completed is False and 1 when completed is True).
+
+An fomula is formed:
+
+y ~ SUB1 + GENDER + raceEthnicity + homeless
+
+Then We put the fomula into the INLA model and treat the 4 variables SUB1, GENDER , raceEthnicity, homeless as fixed effect, and the variables STFIPS and Town
+as random effect. The INLA model is created uses Bayesian inference, 
+$Y{it}$ ~ Bernoulli($\lambda{i}$)
+logit($\lambda{i}$) = $\mu  +  X{it} \beta + U{i}$
+$ U{i} $ ~ N$(0, \sigma^2)$
+
+with prior distribution on the random variables to estimate the posterior.
+
+To evaluate the inla model, a glm model without random effect is formed under the formula:
+$Odds_{y} = \beta_0 + \beta_1 x_{SUB1} + \beta_2 I_{Gender} + \beta_3 I_{raceEthniccity} + \beta_4 I_{homeless} + \beta_5 I_{STFIPS} + \beta_6 I_{Town}$ 
+
+In which we checked the results from both models for accuracy.
+
+## Results
+
+Through the INLA model, the results of posterior means and quantiles for model parameters were shown in the following table:
+
+```{r, echo=FALSE}
+smoke <- matrix(c(0.682,0.562,0.826,1.642,1.608,1.677,0.898,0.875,0.921,0.924
+                  ,0.898,0.952,0.982,0.944,1.022,0.876,0.834, 0.920, 0.895,
+                  0.880, 0.910, 0.829, 0.810, 0.849,0.685, 0.669, 0.702, 0.730,
+                  0.680, 0.782, 0.864, 0.810, 0.920, 0.851, 0.790, 0.91, 1.133,
+                  1.038, 1.236, 0.847, 0.750, 0.955, 1.451, 1.225, 1.720, 0.844,
+                  0.623, 1.143, 1.015, 0.983, 1.048,0.581, 0.482, 0.698, 0.537,
+                  0.482, 0.597),ncol=3,byrow=TRUE)
+colnames(smoke) <- c("0.5quant", "0.025quant", "0.975quant")
+rownames(smoke) <- c("Intercept(Intercept)","SUB1(ALCOHOL)","HEROIN","OTHER OPIATES AND SYNTHET","METHAMPHETAMINE","COCAINE/CRACK" ,"GENDER(FEMALE)" ,"raceEthnicity(Hispanic)" , "BLACK OR AFRICAN AMERICAN" , "AMERICAN INDIAN (OTHER TH","OTHER SINGLE RACE" ,"TWO OR MORE RACES" , "ASIAN" , "NATIVE HAWAIIAN OR OTHER" , "ASIAN OR PACIFIC ISLANDER" , "ALASKA NATIVE (ALEUT, ESK" ,"homeless(TRUE)" ,"SD(STFIPS)","TOWN" )
+table1 <- as.table(smoke, cap = "Results of Posterior means and quantiles for model parameters")
+table1
+```
+
+From the table, the means of individuals who addicted to Heroin, Opiates, Methamphetamine, Cocaine are significantly lower than the ones addicted to alcohol.
+
+The effect of priors is to help estimate the posteriors before observing data.
+Through INLA model, Bayesians treat the parameters STFIPS and Town as random, with a prior distribution. The combination of prior with the data set will lead to posterior distribution on parameters, which contributed quantification the uncertainty in estimation and finding the likelihood.
+
+By plotting priors and posterior from INLA, we kept adjusting the prior distribution on random effects STFIPS and Town. We start from param = (0.1, 0.05) where the standard deviation prior is approaching to a straight line, and end up with param = (0.8, 0.05) to capture a significant curve on prior SD. More adjusting on the distribution of prior will be required for better quantification of uncertainty and likelihood findings.
+
+
+
+## Conclusions
+
+This report analiyze and model the data set associated with the Treatment Episode Data Set – Discharges (TEDS-D) from substance abuse treatment facilities. The purpose of the report is discussing the drug treatment applied to young persons, and the effects by characteristics, geographic location and the drugs addctied to. The INLA model is formed by 2 random effects, variable STIFIPS and Town, and 4 variables SUB1, GENDER, raceEthnicity, homeless as fixed effects. Through the scientific results showing in the "Result" Section, one of the founding is the completion of drug treatment is more difficult to the individuals addicted to 'hard' drugs (Heroin, Opiates, Methamphetamine, Cocaine) than the ones addicted to alcohol or marijuana, and the other concludes that state FLORIDA carried out more effective treatment programes than the other states, while the low completion rates in state Virginia is highly problematic. According to these findings, classification on treatment to young persons should been carried out, with the ones who addicted to "hard" drug recieve "harder" treatment, such as long-term and more frequent contacts with monitors. Besides, treatment facilities in more problemetic area should improve the treatment efficiency and learn from the effective states, through communication and exchange learning might solve the problem.
+
+
+
+## Appendix
+
+The r code for the report is attached here:
+
+```{r, echo=TRUE, eval=FALSE}
+download.file("http://pbrown.ca/teaching/appliedstats/data/drugs.rds",
+"drugs.rds")
+install.packages("Pmisc", repos="http://R-Forge.R-project.org")
+xSub = readRDS("drugs.rds")
+forInla = na.omit(xSub)
+forInla$y = as.numeric(forInla$completed)
+library(INLA)
+library(INLAutils)
+ires = inla(y ~ SUB1 + GENDER + raceEthnicity + homeless +
+            f(STFIPS, hyper=list(prec=list(prior='pc.prec', param=c(
+              0.1, 0.05))))+
+              f(TOWN, hyper=list(prec=list(prior='pc.prec', param=c(
+              0.1, 0.05)))),
+            data=forInla, 
+            family='binomial',
+            control.inla = list(strategy='gaussian', int.strategy='eb'))
+
+ires = inla(y ~ SUB1 + GENDER + raceEthnicity + homeless +
+            f(STFIPS, hyper=list(prec=list(prior='pc.prec', param=c(
+              0.8, 0.05))))+
+              f(TOWN, hyper=list(prec=list(prior='pc.prec', param=c(
+              0.8, 0.05)))),
+            data=forInla, 
+            family='binomial',
+            control.inla = list(strategy='gaussian', int.strategy='eb'))
+
+a = glm(y ~ SUB1 + GENDER + raceEthnicity + homeless + STFIPS + TOWN,
+        data = forInla,
+        family = 'binomial')
+
+toPrint = as.data.frame(rbind(exp(ires$summary.fixed[,
+c(4, 3, 5)]), sdState$summary[, c(4, 3, 5)]))
+sss = "^(raceEthnicity|SUB1|GENDER|homeless|SD)(.[[:digit:]]+.[[:space:]]+| for )?"
+toPrint = cbind(variable = gsub(paste0(sss, ".*"),
+"\\1", rownames(toPrint)), category = substr(gsub(sss,
+"", rownames(toPrint)), 1, 25), toPrint)
+Pmisc::mdTable(toPrint, digits = 3, mdToTex = TRUE,
+guessGroup = TRUE, caption = "Posterior means and quantiles for model
+parameters.")
+ires$summary.random$STFIPS$ID = gsub("[[:punct:]]|[[:digit:]]",
+"", ires$summary.random$STFIPS$ID)
+ires$summary.random$STFIPS$ID = gsub("DISTRICT OF COLUMBIA",
+"WASHINGTON DC", ires$summary.random$STFIPS$ID)
+toprint = cbind(ires$summary.random$STFIPS[1:26, c(1,
+2, 4, 6)], ires$summary.random$STFIPS[-(1:26),
+c(1, 2, 4, 6)])
+colnames(toprint) = gsub("uant", "", colnames(toprint))
+knitr::kable(toprint, digits = 1, format = "latex")
+
+```
